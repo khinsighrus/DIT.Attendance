@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>DIT Attendance - Rep Approval</title>
+<style>
+body{font-family:Arial;max-width:800px;margin:auto;padding:15px;background:#f5f5f5}
+h1{text-align:center;color:#004aad}
+.box{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin-top:15px}
+input{padding:12px;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:8px;margin:8px 0}
+button{padding:12px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;margin-top:8px}
+.student-btn{background:#25D366;color:white;font-size:17px}
+.rep-btn{background:#004aad;color:white}
+.approve{background:#25D366;color:white;width:auto;padding:8px 14px;margin-left:5px}
+.reject{background:#ff4444;color:white;width:auto;padding:8px 14px;margin-left:5px}
+.student{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee}
+.pending{background:#fff8e1;border-left:4px solid orange}
+.count{text-align:center;font-weight:bold;font-size:18px;margin:10px}
+.tabs{display:flex;gap:10px;justify-content:center}
+.tab{padding:10px 20px;border-radius:20px;background:#ddd;border:none;width:auto}
+.tab.active{background:#004aad;color:white}
+</style>
+</head>
+<body>
+
+<h1>DIT Daily Attendance</h1>
+
+<div class="tabs">
+<button class="tab active" id="tS" onclick="setView('student')">Student View</button>
+<button class="tab" id="tR" onclick="setView('rep')">Rep View</button>
+</div>
+
+<!-- STUDENT -->
+<div id="studentView" class="box">
+<h2 style="text-align:center">Mark Yourself Present</h2>
+<input type="text" id="myId" placeholder="Enter Your Student ID e.g. 012345678C">
+<button class="student-btn" onclick="studentCheckIn()">I AM PRESENT IN CLASS</button>
+<p id="studentMsg" style="text-align:center;margin-top:12px;font-weight:bold"></p>
+<p style="text-align:center;font-size:13px;color:#666;margin-top:15px">After you click, wait for Course Rep to approve. You will see Present only after approval.</p>
+</div>
+
+<!-- REP -->
+<div id="repView" class="box" style="display:none">
+<div id="loginBox">
+<h3>Course Rep Login</h3>
+<input type="password" id="repPass" placeholder="Enter Rep Password">
+<button class="rep-btn" onclick="repLogin()">Login</button>
+<p style="font-size:12px;text-align:center">Default: dit2026</p>
+</div>
+
+<div id="repPanel" style="display:none">
+<div style="display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap">
+<input type="date" id="attDate" onchange="loadRep()" style="width:auto">
+<input type="text" id="searchRep" placeholder="Search ID" onkeyup="loadRep()" style="width:40%">
+</div>
+<p class="count" id="repCount"></p>
+
+<h3>🔔 Pending Requests</h3>
+<div id="pendingList"></div>
+
+<h3>✅ Approved Today</h3>
+<div id="approvedList"></div>
+
+<button class="rep-btn" style="background:black;margin-top:15px" onclick="exportCSV()">Export Today's CSV</button>
+</div>
+</div>
+
+<script>
+let allRecords = JSON.parse(localStorage.getItem('dit_daily')) || {};
+let pending = JSON.parse(localStorage.getItem('dit_pending')) || {};
+let currentDate = new Date().toISOString().split('T')[0];
+document.getElementById('attDate').value = currentDate;
+const REP_PASSWORD = "dit2026";
+
+function setView(view){
+ document.getElementById('studentView').style.display = view==='student'? 'block':'none';
+ document.getElementById('repView').style.display = view==='rep'? 'block':'none';
+ document.getElementById('tS').classList.toggle('active', view==='student');
+ document.getElementById('tR').classList.toggle('active', view==='rep');
+ if(view==='rep') loadRep();
+}
+
+function studentCheckIn(){
+ let id = document.getElementById('myId').value.trim().toUpperCase();
+ if(id===""){alert("Enter ID");return;}
+ let date = new Date().toISOString().split('T')[0];
+ if(!pending[date]) pending[date]=[];
+ if(!allRecords[date]) allRecords[date]={};
+
+ if(pending[date].some(p=>p.id===id)){
+   document.getElementById('studentMsg').innerHTML = "<span style='color:orange'>Already in pending. Wait for rep.</span>";
+   return;
+ }
+ if(allRecords[date][id]){
+   document.getElementById('studentMsg').innerHTML = "<span style='color:green'>Already marked Present today ✓</span>";
+   return;
+ }
+
+ pending[date].push({id:id,time:new Date().toLocaleTimeString()});
+ localStorage.setItem('dit_pending', JSON.stringify(pending));
+ document.getElementById('myId').value="";
+ document.getElementById('studentMsg').innerHTML = "<span style='color:green'>Sent! Waiting for Course Rep to approve ✓</span>";
+}
+
+function repLogin(){
+ if(document.getElementById('repPass').value!==REP_PASSWORD){alert("Wrong password");return;}
+ document.getElementById('loginBox').style.display="none";
+ document.getElementById('repPanel').style.display="block";
+ loadRep();
+}
+
+function loadRep(){
+ let date = document.getElementById('attDate').value;
+ currentDate = date;
+ if(!pending[date]) pending[date]=[];
+ if(!allRecords[date]) allRecords[date]={};
+ let search = (document.getElementById('searchRep').value || "").toLowerCase();
+ let pList = document.getElementById('pendingList');
+ let aList = document.getElementById('approvedList');
+ pList.innerHTML=""; aList.innerHTML="";
+
+ let filteredPending = pending[date].filter(p=>p.id.toLowerCase().includes(search));
+ filteredPending.forEach(p=>{
+   let realIdx = pending[date].indexOf(p);
+   pList.innerHTML += '<div class="student pending"><span><b>'+ p.id +'</b><br><small>'+ p.time +'</small></span><div><button class="approve" onclick="approve('+ realIdx +')">Approve</button><button class="reject" onclick="reject('+ realIdx +')">X</button></div></div>';
+ });
+ if(filteredPending.length===0) pList.innerHTML = "<p style='text-align:center;color:#888'>No pending requests</p>";
+
+ let approvedIds = Object.keys(allRecords[date]).filter(id=>id.toLowerCase().includes(search));
+ approvedIds.forEach(id=>{
+   aList.innerHTML += '<div class="student"><span>'+ id +' - Present ✓</span><button class="reject" onclick="removeApproved(\''+ id +'\')">Remove</button></div>';
+ });
+ if(approvedIds.length===0) aList.innerHTML = "<p style='text-align:center;color:#888'>No approved yet</p>";
+
+ document.getElementById('repCount').innerText = date + " | Pending: " + pending[date].length + " | Present: " + Object.keys(allRecords[date]).length;
+}
+
+function approve(idx){
+ let date = document.getElementById('attDate').value;
+ let student = pending[date][idx];
+ if(!allRecords[date]) allRecords[date]={};
+ allRecords[date][student.id]="Present";
+ pending[date].splice(idx,1);
+ localStorage.setItem('dit_pending', JSON.stringify(pending));
+ localStorage.setItem('dit_daily', JSON.stringify(allRecords));
+ loadRep();
+}
+
+function reject(idx){
+ let date = document.getElementById('attDate').value;
+ pending[date].splice(idx,1);
+ localStorage.setItem('dit_pending', JSON.stringify(pending));
+ loadRep();
+}
+
+function removeApproved(id){
+ let date = document.getElementById('attDate').value;
+ if(confirm("Remove "+id+"?")){
+   delete allRecords[date][id];
+   localStorage.setItem('dit_daily', JSON.stringify(allRecords));
+   loadRep();
+ }
+}
+
+function exportCSV(){
+ let date = document.getElementById('attDate').value;
+ let rec = allRecords[date] || {};
+ let pend = pending[date] || [];
+ let csv = "StudentID,Date,Status\n";
+ Object.keys(rec).forEach(id=>{ csv += id + "," + date + ",Present\n"; });
+ pend.forEach(p=>{ csv += p.id + "," + date + ",Pending\n"; });
+ let blob = new Blob([csv], {type:'text/csv'});
+ let a = document.createElement('a');
+ a.href = URL.createObjectURL(blob);
+ a.download = "Attendance_" + date + ".csv";
+ a.click();
+}
+</script>
+</body>
+</html>
